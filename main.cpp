@@ -19,28 +19,40 @@ const int batchSize = 10000;
 //Amount of parents that will be taken from the last gen
 const int parentAmount = 100;
 
-bool shouldClose = false;
-
 
 short int playerX = 0;
 short int playerY = 0;
 short int foodX = 0;
 short int foodY = 0;
 
+bool isTraining = true;
+bool shouldClose = false;
+
+//The agent that will move around the interactive arena
+agent* arenaAgent;
+
 void movePlayer(char direction){
 
-	//	  5
-	//	0 + 2
+	//	  0
+	//	1 + 2
 	//	  3
-	// 0 is left, 2 is right
-	// 5 is up, 3 is down
-	//Now that i look back to this, doing it this way was a really stupid idea...
-	//Looks pretty here at least :p
 
-	if(direction < 3){
-		playerX += direction -1;
-	}else{
-		playerY += direction -4;
+	switch (direction){
+		case 0:
+			playerY += 1; 
+			break;
+		
+		case 1:
+			playerX -= 1;
+			break;
+
+		case 2:
+			playerX += 1;
+			break;
+
+		case 3:
+			playerY -= 1;
+			break;
 	}
 
 }
@@ -50,14 +62,22 @@ int senseFood(char direction){
 	
 	int impulse = 0;
 
-	if(direction == 0){
-		impulse = playerX - foodX;
-	}else if(direction == 2){
-		impulse = foodX - playerX;
-	}else if(direction == 5){
-		impulse = foodY - playerY;
-	}else if(direction == 3){
-		impulse = playerY - foodY;
+	switch (direction){
+		case 0:
+			impulse = foodY - playerY;
+			break;
+		
+		case 1:
+			impulse = playerX - foodX;
+			break;
+
+		case 2:
+			impulse = foodX - playerX;
+			break;
+
+		case 3:
+			impulse = playerY - foodY;
+			break;
 	}
 
 	if(impulse <= 0){
@@ -80,6 +100,8 @@ int distanceToFood(){
 
 void* window(void* fittest){
 
+	
+
 	unsigned short* fittestBrain = (unsigned short*)fittest;
 
 	SetTargetFPS(20);
@@ -91,8 +113,12 @@ void* window(void* fittest){
 	Rectangle neuronRecs[brainSize*brainSize] = { 0 };
 	Rectangle arenaRecs[brainSize*brainSize] = { 0 };
 
+	const int arenaSize = 11;
+
+	const float arenaSquareSize = (screenSize.y-50)/arenaSize;
     const float neuronSquareSize = (screenSize.y-50)/brainSize;
 
+	//initialize neuron rectangles
     for (int i = 0; i < brainSize*brainSize; i++){
         neuronRecs[i].x = 25.0f + neuronSquareSize *(i%brainSize);
         neuronRecs[i].y = 25.0f + neuronSquareSize *(i/brainSize);
@@ -100,12 +126,24 @@ void* window(void* fittest){
         neuronRecs[i].height = neuronSquareSize - (neuronSquareSize/6);
     }
 
+	//initialize arena rectangles
+	for (int i = 0; i < arenaSize*arenaSize; i++){
+        arenaRecs[i].x =  (screenSize.x - 100)/2 + 25.0f + arenaSquareSize *(i%arenaSize);
+        arenaRecs[i].y = 25.0f + arenaSquareSize *(i/arenaSize);
+        arenaRecs[i].width = arenaSquareSize;
+        arenaRecs[i].height = arenaSquareSize;
+    }
 
     Vector2 mousePoint = { 0.0f, 0.0f };
 
+	int frame = 0;
+
     while (!WindowShouldClose())
     {
+		frame++;
         bool isMouseOverNeuron = false;
+
+		ClearBackground(RAYWHITE);
 
 		//Value of the neuron mouse is over
 		unsigned short neuronValue;
@@ -146,26 +184,63 @@ void* window(void* fittest){
 		//Show neuron weight when mouse is over it
         if(isMouseOverNeuron){
 
-            DrawRectangle(mousePoint.x-50, mousePoint.y-45, 100,40 , GRAY);
+            DrawRectangle(mousePoint.x-50, mousePoint.y-45, 115,40 , GRAY);
             DrawText(std::to_string(neuronValue).c_str(), mousePoint.x-30, mousePoint.y-40, 30, WHITE);
 
         }
 
 
-		//Draw the arena
+		
 
-		const int arenaSize = 11;
+		Rectangle arenaRectangle = {(screenSize.x - 100)/2 + 25,25,arenaSquareSize*arenaSize,arenaSquareSize*arenaSize};
 
-		const float arenaSquareSize = (screenSize.y-50)/arenaSize;
 
-		for(int i=0;i < arenaSize*arenaSize;i++){
-			DrawRectangleLinesEx(Rectangle{675+i%arenaSize*arenaSquareSize,25+i/arenaSize*arenaSquareSize,arenaSquareSize,arenaSquareSize},2,BLACK);
+		if(isTraining){
+
+			DrawRectangleRec(arenaRectangle,GRAY);
+			DrawText("Currently Training\nPlease Wait.",(screenSize.x - 100)/2+100,75,40,BLACK);
+
+		}else{
+
+			//Draw the arena if done training
+
+			if(frame % 15 == 0){
+				arenaAgent->thinkAndAct();
+			}
+
+			for(int i=0;i < arenaSize*arenaSize;i++){
+				
+				const int visuralCorrection = arenaSize/2;
+
+				for(int i=0;i < arenaSize*arenaSize;i++){
+					if(IsMouseButtonDown(MOUSE_LEFT_BUTTON)){
+						if (CheckCollisionPointRec(mousePoint, arenaRecs[i])){
+							playerX = 0;
+							playerY = 0;
+							foodX = i % arenaSize -visuralCorrection;
+							foodY = i / arenaSize -visuralCorrection;
+						}
+					}
+
+					//0,0 will be top left instead of middle if we don't do this
+					const int playerScreenX = playerX + visuralCorrection;
+					const int playerScreenY = playerY + visuralCorrection;
+					const int foodScreenX = foodX + visuralCorrection;
+					const int foodScreenY = foodY + visuralCorrection;
+
+					DrawRectangleLinesEx(arenaRecs[i],2,BLACK);
+					DrawRectangleRec(arenaRecs[playerScreenY*arenaSize+playerScreenX],RED); //Draw player
+					DrawRectangleRec(arenaRecs[foodScreenY*arenaSize+foodScreenX],GREEN); //Draw food
+
+				}
+			}
+
 		}
 
-
+		
         BeginDrawing();
-        ClearBackground(RAYWHITE);
-            
+        
+
         EndDrawing();
     }
 
@@ -180,31 +255,45 @@ int main(){
 
 	srand(time(NULL));
 
+	motorNeuron motorArray[4];
+	sensoryNeuron sensoryArray[4];
+
+	//We need to make sure there are no overlaps between neuron locations
+	//Ideally, they shouldn't be next to each other either, but that is a problem for another day
+	
+	const int totalSpecialNeuronCount = sizeof(motorArray)/sizeof(motorNeuron) + sizeof(sensoryArray)/sizeof(sensoryNeuron);
+
+	struct basicCoords{
+		int x;
+		int y;
+	};
 	
 
-	motorNeuron motorArray[4];
-	printf("asdasdasda: %d",sizeof(motorArray)/sizeof(motorNeuron));
-	/*motorArray[0] = motorNeuron{6,6,0,&movePlayer,0};
-	motorArray[1] = motorNeuron{13,6,0,&movePlayer,2};
-	motorArray[2] = motorNeuron{6,13,0,&movePlayer,5};
-	motorArray[3] = motorNeuron{13,13,0,&movePlayer,3};*/
+	basicCoords SNeuronLocs[totalSpecialNeuronCount]; //Special Neuron Locations
+	//Keep neuron locations in an array so we can check for overlaps
 
-	motorArray[0] = motorNeuron{rand()%brainSize,rand()%brainSize,0,&movePlayer,0};
-	motorArray[1] = motorNeuron{rand()%brainSize,rand()%brainSize,0,&movePlayer,2};
-	motorArray[2] = motorNeuron{rand()%brainSize,rand()%brainSize,0,&movePlayer,5};
-	motorArray[3] = motorNeuron{rand()%brainSize,rand()%brainSize,0,&movePlayer,3};
+	for(int i=0; i < totalSpecialNeuronCount;i++){
+
+		SNeuronLocs[i] = {rand()%brainSize,rand()%brainSize};
+
+		for(int a=0;a < i;a++){
+			if(SNeuronLocs[a].x == SNeuronLocs[i].x && SNeuronLocs[a].y == SNeuronLocs[i].y){
+				//Loop won't finish until every neuron has a unique coordinate
+				i--;
+				break;
+			}
+		}
+	}
+
+	//Apply values to the neurons
+	for(int i=0; i < sizeof(motorArray)/sizeof(motorNeuron);i++){
+		motorArray[i] = motorNeuron{SNeuronLocs[i].x,SNeuronLocs[i].y,0,&movePlayer,char(i)};
+	}
+	for(int i=0; i < sizeof(sensoryArray)/sizeof(sensoryNeuron);i++){
+		sensoryArray[i] = sensoryNeuron{SNeuronLocs[i+4].x,SNeuronLocs[i+4].y,&senseFood,char(i)};
+	}
 
 
-	sensoryNeuron sensoryArray[4];
-	/*sensoryArray[0] = sensoryNeuron{2,2,&senseFood,0};
-	sensoryArray[1] = sensoryNeuron{17,2,&senseFood,2};
-	sensoryArray[2] = sensoryNeuron{2,17,&senseFood,5};
-	sensoryArray[3] = sensoryNeuron{17,17,&senseFood,3};*/
-
-	sensoryArray[0] = sensoryNeuron{rand()%brainSize,rand()%brainSize,&senseFood,0};
-	sensoryArray[1] = sensoryNeuron{rand()%brainSize,rand()%brainSize,&senseFood,2};
-	sensoryArray[2] = sensoryNeuron{rand()%brainSize,rand()%brainSize,&senseFood,5};
-	sensoryArray[3] = sensoryNeuron{rand()%brainSize,rand()%brainSize,&senseFood,3};
 
 
 	std::vector<agent> agentBatch;
@@ -232,7 +321,8 @@ int main(){
 
 		int fittest = 0;
 
-		for(int x=0; x < 35;x++){
+		//Number of generations to be trained
+		for(int x=0; x < 50;x++){
 
 			for(int i=0;i<batchSize;i++){
 
@@ -245,9 +335,6 @@ int main(){
 				for(int a=0;a < 10;a++){
 					//We will give every agent 10 moves
 					agentBatch[i].thinkAndAct();
-				}
-				if(i == fittest){
-					printf("pos0: %d %d\n",playerX,playerY);
 				}
 
 				int distance = distanceToFood(); //Temporary place to keep first fitness
@@ -262,33 +349,23 @@ int main(){
 					//We will give every agent 10 moves
 					agentBatch[i].thinkAndAct();
 				}
-				if(i == fittest){
-					printf("pos1: %d %d\n",playerX,playerY);
-				}
 				
 				distance += distanceToFood();
 				agentBatch[i].fitness = 10000-(distance);
 
 
 			}
-
-			playerX = 0;
-			playerY = 0;
-			foodX = 3;
-			foodY = -3;
-
-			for(int a=0;a < 10;a++){
-			
-				agentBatch[fittest].thinkAndAct();
-
-			}
-
-			printf("test result: %d %d\n",playerX,playerY);
-
+		
 			fittest = breed.breed(agentBatch);
-			printf("\ngen %d fittest: %d fitness: %d distance: %d\n",x,fittest,agentBatch[fittest].fitness,distanceToFood());
+			printf("gen %d fittest: %d fitness: %d distance: %d\n",x,fittest,agentBatch[fittest].fitness,distanceToFood());
+
+			if(agentBatch[fittest].fitness == 10000){ break; }
 
 		}
+
+		arenaAgent = &agentBatch[fittest];
+		isTraining = false;
+
 
 		while(!shouldClose){
 			WaitTime(500);

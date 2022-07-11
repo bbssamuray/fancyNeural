@@ -50,6 +50,7 @@ void agent::thinkAndAct(){
         std::vector<int> neuronChain;
         int currentNeuronLoc = sensoryNeuronArray[i].posY * neuralSize + sensoryNeuronArray[i].posX;
         int currentRecursion = 1;
+
         
         fireImpulse(sensoryNeuronArray[i].sensorFunction(sensoryNeuronArray[i].direction),&currentNeuronLoc,neuronChain,&currentRecursion);
         
@@ -70,6 +71,9 @@ void agent::thinkAndAct(){
 }
 
 void agent::fireImpulse(int intensity,int* neuronLoc,std::vector<int> &neuronChain,int* currentRecursion){
+
+    //Pretty sure we don't need this function to be recursive anymore
+    //Will be a lot more efficent with a rewrite as the goal of this function has changed a lot since the beginning
 
     if(intensity == 0){
         return;
